@@ -1,116 +1,100 @@
 import streamlit as st
-import requests
-from bs4 import BeautifulSoup
 import json
 import os
 from openai import OpenAI
+import requests
+from bs4 import BeautifulSoup
 
-# =====================
-# 🔐 OpenAI
-# =====================
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+# ========== 安全读取 ==========
+api_key = st.secrets.get("OPENAI_API_KEY")
 
-# =====================
-# 💰 Stripe支付链接（自己替换）
-# =====================
-STRIPE_URL = "https://buy.stripe.com/你的支付链接"
+if not api_key:
+    st.error("缺少 OPENAI_API_KEY")
+    st.stop()
 
-# =====================
-# 📦 本地数据库（JSON文件）
-# =====================
+client = OpenAI(api_key=api_key)
+
 DB_FILE = "users.json"
 
+# ========== 初始化数据库 ==========
 if not os.path.exists(DB_FILE):
     with open(DB_FILE, "w") as f:
         json.dump({}, f)
 
 def load_db():
-    with open(DB_FILE, "r") as f:
-        return json.load(f)
+    return json.load(open(DB_FILE))
 
-def save_db(data):
-    with open(DB_FILE, "w") as f:
-        json.dump(data, f)
+def save_db(db):
+    json.dump(db, open(DB_FILE, "w"))
 
-# =====================
-# 🌐 爬虫
-# =====================
+# ========== 用户 ==========
+st.title("💰 AI SaaS商业系统")
+
+email = st.text_input("输入邮箱")
+
+db = load_db()
+
+if email and email not in db:
+    db[email] = {"vip": False, "count": 0}
+    save_db(db)
+
+vip = db.get(email, {}).get("vip", False)
+count = db.get(email, {}).get("count", 0)
+
+# ========== 免费限制 ==========
+FREE_LIMIT = 3
+
+# ========== 支付链接（你后面改） ==========
+PAY_URL = "https://你的支付链接"
+
+if email and not vip:
+    st.sidebar.markdown(f"[💰 升级VIP ¥29]({PAY_URL})")
+
+# ========== 爬虫 ==========
 def crawl(url):
     headers = {"User-Agent": "Mozilla/5.0"}
     res = requests.get(url, headers=headers, timeout=10)
     soup = BeautifulSoup(res.text, "html.parser")
+    return [a.get_text(strip=True) for a in soup.find_all("a")]
 
-    return [a.get_text(strip=True) for a in soup.find_all("a") if a.get_text()]
-
-# =====================
-# 🤖 AI分析
-# =====================
-def ai_analyze(text):
-    response = client.chat.completions.create(
+# ========== AI ==========
+def ai(text):
+    res = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": "你是商业分析AI"},
-            {"role": "user", "content": f"分析网站商业价值：\n{text}"}
+            {"role": "user", "content": text}
         ]
     )
-    return response.choices[0].message.content
+    return res.choices[0].message.content
 
-# =====================
-# 🌐 页面
-# =====================
-st.title("💰 零环境AI SaaS（可收费版）")
-
-email = st.text_input("输入邮箱（用于登录）")
-
-db = load_db()
-
-# =====================
-# 👤 用户初始化
-# =====================
-if email and email not in db:
-    db[email] = {"vip": False}
-    save_db(db)
-
-vip = email and db.get(email, {}).get("vip", False)
-
-# =====================
-# 💳 支付入口
-# =====================
-if email and not vip:
-    st.sidebar.markdown(f"[💎 升级VIP ¥29/月]({STRIPE_URL})")
-
-    if st.sidebar.button("✔ 我已支付（点击解锁VIP）"):
-        db[email]["vip"] = True
-        save_db(db)
-        st.sidebar.success("VIP已开通 🎉")
-        vip = True
-
-# =====================
-# 输入
-# =====================
 url = st.text_input("输入网址")
 
-# =====================
-# 🚀 执行
-# =====================
 if st.button("开始分析"):
 
-    if not url:
-        st.warning("请输入网址")
+    if not email:
+        st.warning("请输入邮箱")
         st.stop()
 
-    if not vip:
-        st.warning("你是免费用户（VIP无限使用）")
+    if not vip and count >= FREE_LIMIT:
+        st.error("免费次数已用完，请升级VIP")
+        st.stop()
 
-    with st.spinner("AI分析中..."):
+    if url:
 
-        data = crawl(url)
-        text = " ".join(data)
+        with st.spinner("AI分析中..."):
 
-        result = ai_analyze(text)
+            data = crawl(url)
+            text = " ".join(data)
+            result = ai(text)
 
-    st.success("分析完成")
-    st.subheader("📊 AI报告")
-    st.write(result)
+            # 更新次数
+            if not vip:
+                db[email]["count"] = count + 1
+                save_db(db)
 
-    st.download_button("下载报告", result, "report.txt")
+        st.success("完成")
+        st.write(result)
+
+    else:
+        st.warning("请输入网址")
