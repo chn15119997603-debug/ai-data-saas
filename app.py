@@ -2,18 +2,21 @@ import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
+from openai import OpenAI
 
+# =====================
+# 🔑 填你的API Key（重要）
+# =====================
+client = OpenAI(api_key="在这里填你的API_KEY")
 
-# 🧠 AI爬虫 + 分类
+# =====================
+# 爬虫函数
+# =====================
 def crawl(url):
 
     headers = {"User-Agent": "Mozilla/5.0"}
 
-    try:
-        res = requests.get(url, headers=headers, timeout=10)
-    except:
-        return []
-
+    res = requests.get(url, headers=headers, timeout=10)
     soup = BeautifulSoup(res.text, "html.parser")
 
     data = []
@@ -25,84 +28,67 @@ def crawl(url):
         if not text or not link:
             continue
 
-        if link.startswith("/"):
-            link = url.rstrip("/") + link
-
-        # 🤖 AI分类逻辑
-        if "商品" in text or "¥" in text or "$" in text:
-            tag = "商品"
-        elif "新闻" in text:
-            tag = "新闻"
-        elif "招聘" in text:
-            tag = "招聘"
-        elif len(text) < 5:
-            tag = "链接"
-        else:
-            tag = "普通内容"
-
-        data.append({
-            "内容": text,
-            "链接": link,
-            "AI分类": tag
-        })
+        data.append(text)
 
     return data
 
 
-# 🖥️ UI
-st.set_page_config(page_title="AI商业数据系统", layout="wide")
+# =====================
+# 🤖 GPT分析函数
+# =====================
+def ai_analyze(text):
 
-st.title("🧠 AI商业级数据分析系统")
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {
+                "role": "system",
+                "content": "你是一个商业分析AI助手"
+            },
+            {
+                "role": "user",
+                "content": f"""
+请分析以下网页内容：
 
-url = st.text_input("请输入目标网址")
+1. 网站类型
+2. 主要业务
+3. 商业价值（高/中/低）
+4. 是否适合做竞品
+5. 总结
 
-if st.button("开始AI分析"):
+内容：
+{text}
+"""
+            }
+        ]
+    )
+
+    return response.choices[0].message.content
+
+
+# =====================
+# 🌐 页面
+# =====================
+st.title("🧠 AI GPT网页分析SaaS")
+
+url = st.text_input("输入网址")
+
+if st.button("开始分析"):
 
     if url:
 
-        data = crawl(url)
+        with st.spinner("AI正在分析中..."):
 
-        if len(data) == 0:
-            st.warning("没有抓到数据")
-        else:
+            data = crawl(url)
 
-            df = pd.DataFrame(data)
+            text = " ".join(data)
 
-            st.success("AI分析完成")
+            result = ai_analyze(text)
 
-            # 📊 展示数据
-            st.subheader("📊 数据结果")
-            st.dataframe(df, use_container_width=True)
+        st.success("分析完成")
 
-            # 📈 统计
-            st.subheader("📈 AI统计分析")
-
-            st.write("总数据量：", len(df))
-            st.write("商品数量：", len(df[df["AI分类"] == "商品"]))
-            st.write("新闻数量：", len(df[df["AI分类"] == "新闻"]))
-            st.write("招聘数量：", len(df[df["AI分类"] == "招聘"]))
-
-            # 💾 下载
-            st.download_button(
-                "下载CSV",
-                df.to_csv(index=False).encode("utf-8-sig"),
-                "ai_data.csv",
-                "text/csv"
-            )
-
-            # 🧠 AI总结（简易版）
-            st.subheader("🧠 AI分析报告")
-
-            summary = f"""
-            该页面共采集 {len(df)} 条数据。
-            其中商品 {len(df[df['AI分类']=='商品'])} 条，
-            新闻 {len(df[df['AI分类']=='新闻'])} 条，
-            招聘 {len(df[df['AI分类']=='招聘'])} 条。
-
-            整体来看，这是一个以“信息展示/链接导航”为主的网页。
-            """
-
-            st.write(summary)
+        st.subheader("🤖 AI分析报告")
+        st.write(result)
 
     else:
         st.warning("请输入网址")
