@@ -1,5 +1,5 @@
-流线型
+streamlit
 openai
-请求
+requests
 beautifulsoup4
-仪表盘视图
+dashscope
