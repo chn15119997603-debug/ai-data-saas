@@ -1,100 +1,156 @@
 import streamlit as st
-import json
-import os
-from openai import OpenAI
 import requests
 from bs4 import BeautifulSoup
+from openai import OpenAI
+import hashlib
+import time
 
-# ========== 安全读取 ==========
-api_key = st.secrets.get("OPENAI_API_KEY")
+# =====================
+# 🤖 GPT客户端
+# =====================
+client = OpenAI(
+    api_key=st.secrets["OPENAI_API_KEY"]
+)
 
-if not api_key:
-    st.error("缺少 OPENAI_API_KEY")
-    st.stop()
+# =====================
+# 🚀 页面设置
+# =====================
+st.set_page_config(page_title="AI网页分析工具", page_icon="🚀")
 
-client = OpenAI(api_key=api_key)
+st.title("🚀 GPT网页分析（IP限制版）")
 
-DB_FILE = "users.json"
+st.write("输入网址，AI帮你分析商业价值")
 
-# ========== 初始化数据库 ==========
-if not os.path.exists(DB_FILE):
-    with open(DB_FILE, "w") as f:
-        json.dump({}, f)
-
-def load_db():
-    return json.load(open(DB_FILE))
-
-def save_db(db):
-    json.dump(db, open(DB_FILE, "w"))
-
-# ========== 用户 ==========
-st.title("💰 AI SaaS商业系统")
-
-email = st.text_input("输入邮箱")
-
-db = load_db()
-
-if email and email not in db:
-    db[email] = {"vip": False, "count": 0}
-    save_db(db)
-
-vip = db.get(email, {}).get("vip", False)
-count = db.get(email, {}).get("count", 0)
-
-# ========== 免费限制 ==========
+# =====================
+# 🚀 免费次数
+# =====================
 FREE_LIMIT = 3
 
-# ========== 支付链接（你后面改） ==========
-PAY_URL = "https://你的支付链接"
+# =====================
+# 🧠 获取用户IP（核心）
+# =====================
+def get_user_id():
+    try:
+        ip = st.context.headers.get("X-Forwarded-For")
+        if not ip:
+            ip = "unknown_ip"
+    except:
+        ip = "unknown_ip"
 
-if email and not vip:
-    st.sidebar.markdown(f"[💰 升级VIP ¥29]({PAY_URL})")
+    return hashlib.md5(ip.encode()).hexdigest()
 
-# ========== 爬虫 ==========
+user_id = get_user_id()
+
+# =====================
+# 🗄️ 用户存储（内存版）
+# =====================
+if "users" not in st.session_state:
+    st.session_state.users = {}
+
+if user_id not in st.session_state.users:
+    st.session_state.users[user_id] = 0
+
+# =====================
+# 🌐 爬虫
+# =====================
 def crawl(url):
+
     headers = {"User-Agent": "Mozilla/5.0"}
-    res = requests.get(url, headers=headers, timeout=10)
-    soup = BeautifulSoup(res.text, "html.parser")
-    return [a.get_text(strip=True) for a in soup.find_all("a")]
 
-# ========== AI ==========
-def ai(text):
-    res = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": "你是商业分析AI"},
-            {"role": "user", "content": text}
-        ]
-    )
-    return res.choices[0].message.content
+    r = requests.get(url, headers=headers, timeout=10)
+    soup = BeautifulSoup(r.text, "html.parser")
 
-url = st.text_input("输入网址")
+    texts = []
 
-if st.button("开始分析"):
+    for a in soup.find_all("a"):
+        t = a.get_text(strip=True)
+        if t:
+            texts.append(t)
 
-    if not email:
-        st.warning("请输入邮箱")
+    text = " ".join(texts)
+
+    return text[:1200]
+
+# =====================
+# 🤖 GPT分析
+# =====================
+def ask_gpt(text):
+
+    try:
+        res = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "你是专业商业分析AI"
+                },
+                {
+                    "role": "user",
+                    "content": f"""
+请分析以下网站内容：
+
+1. 网站类型
+2. 核心业务
+3. 商业模式
+4. 是否值得模仿
+5. 风险分析
+6. 总结
+
+内容：
+{text}
+"""
+                }
+            ]
+        )
+
+        return res.choices[0].message.content
+
+    except Exception as e:
+        return f"GPT调用失败：{e}"
+
+# =====================
+# 🌐 输入
+# =====================
+url = st.text_input("请输入网址")
+
+used = st.session_state.users[user_id]
+
+st.sidebar.write(f"已使用：{used}/{FREE_LIMIT}")
+
+# =====================
+# 🚀 开始按钮
+# =====================
+if st.button("开始分析 🚀"):
+
+    # 限制次数
+    if used >= FREE_LIMIT:
+        st.error("次数已用完")
         st.stop()
 
-    if not vip and count >= FREE_LIMIT:
-        st.error("免费次数已用完，请升级VIP")
-        st.stop()
-
-    if url:
-
-        with st.spinner("AI分析中..."):
-
-            data = crawl(url)
-            text = " ".join(data)
-            result = ai(text)
-
-            # 更新次数
-            if not vip:
-                db[email]["count"] = count + 1
-                save_db(db)
-
-        st.success("完成")
-        st.write(result)
-
-    else:
+    # 空判断
+    if not url:
         st.warning("请输入网址")
+        st.stop()
+
+    with st.spinner("AI分析中..."):
+
+        try:
+            text = crawl(url)
+            result = ask_gpt(text)
+
+            # 次数 +1
+            st.session_state.users[user_id] += 1
+
+            st.success("分析完成")
+
+            st.subheader("📊 分析结果")
+            st.write(result)
+
+            st.download_button(
+                "下载报告",
+                result,
+                file_name="report.txt"
+            )
+
+        except Exception as e:
+            st.error(f"系统错误：{e}")
