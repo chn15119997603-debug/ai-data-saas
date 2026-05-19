@@ -1,5 +1,5 @@
 streamlit
-requests
-beautifulsoup4
-pandas
 openai
+仪表盘视图
+请求
+beautifulsoup4
