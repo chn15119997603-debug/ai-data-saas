@@ -1,192 +1,176 @@
-import streamlit as st
-import requests
-from bs4 import BeautifulSoup
-from openai import OpenAI
-import dashscope
+进口流线型作为 st
+进口请求
+从 bs4 进口 BeautifulSoup
+从 openai 进口 OpenAI
 
 # =====================
 # 🤖 GPT客户端
 # =====================
-client = OpenAI(
-    api_key=st.secrets["OPENAI_API_KEY"]
-)
+client = OpenAI​
+API密钥=st。​​secrets​secrets["OPENAI_API_KEY"]]]
+​
 
 # =====================
-# 🚀 页面设置
+# 🚀 页面
 # =====================
-st.set_page_config(
-    page_title="AI网页分析SaaS",
-    page_icon="🚀"
-)
+圣。设置页面配置​
+​“人工智能 SaaS双模型分析”,
+页面图标="🚀“"​🚀",​
+布局="宽"​
+​
 
-st.title("🚀 GPT + 千问 AI网页分析")
+​圣。“🚀人工智能商业分析软件即服务（GPT+千问）”​
 
-st.write("输入网址，AI帮你分析网站商业价值")
+自由限制 =3
 
-# =====================
-# 🚀 免费次数
-# =====================
-FREE_LIMIT = 3
-
-if "count" not in st.session_state:
-    st.session_state.count = 0
-
-st.sidebar.write(f"剩余次数：{FREE_LIMIT - st.session_state.count}")
+​​"计数"不包括在内   st.会话状态:
+圣。会话状态.数数 = 0
 
 # =====================
-# 🌐 输入网址
+# 🌐 侧边栏
 # =====================
-url = st.text_input("请输入网址")
+ st.侧边栏:
+圣.头“📊 用户中心”
+圣。f"已使用：圣。会话状态.数数/自由限制
+圣。降价"---"​​​
+圣。"🤖 AI状态"
+圣。"GPT：🟢"
+圣。​​"千问：🟡（备用）"​
 
 # =====================
 # 🌐 爬虫
 # =====================
-def crawl(url):
+定义文件 爬行​url​:
+标题 ="用户-代理": "Mozilla/5.0“
 
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
+    尝试:
+得到的网址，头=头，超时=10
+汤=美丽的汤。文本，“html.parser”
 
-    r = requests.get(
-        url,
-        headers=headers,
-        timeout=10
-    )
+texts = ]
+        为汤。找到所有“a”:
+文本条形码=真条带
+t:
+文本.附加文本
 
-    soup = BeautifulSoup(r.text, "html.parser")
+.texts=:1200]
 
-    texts = []
-
-    for a in soup.find_all("a"):
-
-        t = a.get_text(strip=True)
-
-        if t:
-            texts.append(t)
-
-    text = " ".join(texts)
-
-    # 防止token太大
-    return text[:1200]
+    除了例外情况e:作为​
+f“抓取失败：e
 
 # =====================
-# 🤖 千问AI
+# 🤖 GPT
 # =====================
-def ask_qwen(text):
+定义文件 ask_gpt文本:
 
-    try:
+休息=客户。闲谈。完成情况。创造
+型号="gpt-4o-迷你"，
+消息=
+            ​"role"​"system"​"content"​"你是商业分析AI"​,
+“角色”“用户”“内容”分析网站：文本
+        ]
+    ​
 
-        dashscope.api_key = st.secrets["QWEN_API_KEY"]
+res.choices0]消息.内容
 
-        response = dashscope.Generation.call(
-            model="qwen-turbo",
-            prompt=f"""
+# =====================
+# 🤖 千问（安全版）
+# =====================
+定义文件 问_qwen文本:
+
+    尝试:
+        进口仪表盘视图
+仪表盘范围。=圣。原料药密钥“QWEN API密钥”]
+
+响应=仪表。一代。呼叫
+型号=​,
+prompt=f"""
 请分析以下网站内容：
 
 1. 网站类型
 2. 核心业务
 3. 商业模式
-4. 是否值得模仿
-5. 风险分析
-6. 总结建议
+4. 盈利方式
+5. 风险
+6. 总结
 
 内容：
-{text}
+​文本​
 """
-        )
+        ​
 
-        return "🟡 千问结果：\n\n" + response.output.text
+响应.输出.文本
 
-    except Exception as e:
-
-        return f"千问失败：{e}"
-
-# =====================
-# 🤖 GPT + 千问自动切换
-# =====================
-def ask_ai(text):
-
-    # 先用GPT
-    try:
-
-        res = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "你是专业商业分析AI"
-                },
-                {
-                    "role": "user",
-                    "content": f"""
-请分析以下网站内容：
-
-1. 网站类型
-2. 核心业务
-3. 商业模式
-4. 是否值得模仿
-5. 风险分析
-6. 总结建议
-
-内容：
-{text}
-"""
-                }
-            ]
-        )
-
-        return "🟢 GPT结果：\n\n" + res.choices[0].message.content
-
-    except Exception as e:
-
-        st.warning("GPT失败，自动切换千问AI")
-
-        return ask_qwen(text)
+    除了例外情况e:作为​
+        ​ f"千问不可用（已跳过）：​e​​
 
 # =====================
-# 🚀 开始按钮
+# 🤖人工智能选择逻辑
 # =====================
-if st.button("开始分析 🚀"):
+定义文件 问你​​​:
 
-    # 次数限制
-    if st.session_state.count >= FREE_LIMIT:
+    # GPT优先
+模式 ==:
 
-        st.error("免费次数已用完")
-        st.stop()
+         “🟢 GPT结果：\n\n“ + ask_gpt文本
 
-    # 空判断
-    if not url:
+    # 千问备用
+elif模式 == :
 
-        st.warning("请输入网址")
-        st.stop()
+         返回“🟡 千问结果：\n\n“ + 问_qwen文本
 
-    with st.spinner("AI分析中..."):
+    # 自动模式
+其他:
 
-        try:
+        尝试:
+        尝试:
+        除了:
+其他的
 
-            # 爬网页
-            text = crawl(url)
+# =====================
+# 🌐 输入
+# =====================
+其他:
 
-            # AI分析
-            result = ask_ai(text)
+mode = st.selectbox
+    "选择AI模式",
+    “自动"标题"AI SaaS v1.1 - GPT +千问双模型版”
+"自动""GPT""千问"
 
-            # 次数+1
-            st.session_state.count += 1
+# =====================
+# 🚀 开始
+# =====================
+ st.button“开始分析 🚀”:
 
-            # 输出
-            st.success("分析完成")
+会话状态。数数>=自由限制：
+st.error“免费次数已用完”
+st.stop
 
-            st.subheader("📊 分析结果")
+      网址：
+警告文本输入"请输入网址"
+st.stop
 
-            st.write(result)
+使用 st.spinner“人工智能分析中...”:
 
-            # 下载按钮
-            st.download_button(
-                "下载报告",
-                result,
-                file_name="report.txt"
-            )
+文本=爬行网址
 
-        except Exception as e:
+结果=问你文本，模式
 
-            st.error(f"系统错误：{e}")
+        st.会话状态.数数 += 1
+
+st.success“分析完成”
+
+st.subheader“📊 分析结果”
+st.结果
+
+st.下载按钮
+            "📥 下载报告",
+结果，
+文件名=“report.txt”
+        ​
+
+# =====================
+# 📌页脚
+# =====================
+圣.标记
+圣.标题“AI SaaS v1.1 - GPT +千问双模型版”
